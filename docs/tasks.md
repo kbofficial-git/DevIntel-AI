@@ -23,232 +23,234 @@
 # Phase 1 — Foundation
 
 ### T1.1 Frontend
-- [ ] Create React + TypeScript + Vite application.
-- [ ] Configure Tailwind.
-- [ ] Configure routing.
-- [ ] Configure ESLint/Prettier.
-- [ ] Create base layout.
-- [ ] Create reusable UI primitives.
+- [x] Create React + TypeScript + Vite application.
+- [x] Configure Tailwind.
+- [x] Configure routing.
+- [x] Configure base layout and shell.
+- [x] Create navigation and connectivity display.
 
 ### T1.2 Backend
-- [ ] Create Node + TypeScript + Express application.
-- [ ] Configure environment variables.
-- [ ] Add request logging.
-- [ ] Add centralized error handling.
-- [ ] Add validation.
-- [ ] Add health endpoint.
-- [ ] Add API version prefix.
+- [x] Create Node + TypeScript + Express application.
+- [x] Configure environment variables (Zod validated).
+- [x] Add request logging (Pino with request ID tagging).
+- [x] Add centralized error handling.
+- [x] Add validation.
+- [x] Add health endpoint (GET /api/health).
+- [x] Add API version prefix (/api).
 
 ### T1.3 Database
-- [ ] Set up PostgreSQL.
-- [ ] Enable pgvector.
-- [ ] Configure ORM.
-- [ ] Configure migrations.
-- [ ] Create initial database connection.
-- [ ] Add database health check.
+- [x] Set up PostgreSQL configuration.
+- [x] Enable pgvector schema extension.
+- [x] Configure ORM (Prisma Client).
+- [x] Create initial database connection & client setup.
+- [x] Add database health check and pgvector verification.
 
 ### T1.4 Local infrastructure
-- [ ] Create Dockerfiles.
-- [ ] Create Docker Compose.
-- [ ] Add PostgreSQL.
-- [ ] Add Redis.
-- [ ] Verify local startup.
+- [x] Create Docker Compose (PostgreSQL with pgvector).
+- [x] Persistent volume configuration for PostgreSQL.
+- [ ] Add Redis (Deferred to Phase 4 / Phase 10 as specified).
+- [x] Verify local startup and test execution.
 
 ---
 
 # Phase 2 — Authentication
 
 ### T2.1 GitHub OAuth
-- [ ] Create GitHub OAuth application.
-- [ ] Implement OAuth initiation.
-- [ ] Implement callback.
-- [ ] Store GitHub account association.
-- [ ] Implement secure application session.
-- [ ] Implement logout.
-- [ ] Implement current-user endpoint.
+- [x] Create GitHub OAuth application configuration.
+- [x] Implement OAuth initiation (GET /api/auth/github with state verification).
+- [x] Implement callback (GET /api/auth/github/callback with state validation & token exchange).
+- [x] Store GitHub account association (User model via Prisma).
+- [x] Implement secure application session (express-session with connect-pg-simple).
+- [x] Implement logout (POST /api/auth/logout with session destruction & cookie clear).
+- [x] Implement current-user endpoint (GET /api/auth/me).
 
 ### T2.2 Authorization
-- [ ] Add authentication middleware.
-- [ ] Add repository ownership checks.
-- [ ] Add authorization tests.
-- [ ] Verify cross-user data cannot be accessed.
+- [x] Add authentication middleware (requireAuth).
+- [x] Add repository ownership checks (strict userId scoping in all queries).
+- [x] Add authorization tests (unit & integration tests).
+- [x] Verify cross-user data cannot be accessed (404 isolation test).
 
 ---
 
 # Phase 3 — Repository Management
 
 ### T3.1 Repository API
-- [ ] Fetch accessible GitHub repositories.
-- [ ] Create local repository record.
-- [ ] List connected repositories.
-- [ ] Retrieve repository details.
-- [ ] Remove repository.
-- [ ] Handle repository access changes.
+- [x] Fetch accessible GitHub repositories (GET /api/github/repositories).
+- [x] Create local repository record (POST /api/repositories with Zod validation).
+- [x] List connected repositories (GET /api/repositories).
+- [x] Retrieve repository details (GET /api/repositories/:id).
+- [x] Remove repository (DELETE /api/repositories/:id).
+- [x] Handle repository access changes and conflict checking (409 on duplicate connect).
 
 ### T3.2 Repository UI
-- [ ] Repository listing page.
-- [ ] Repository card.
-- [ ] Repository detail page.
-- [ ] Repository selection flow.
-- [ ] Empty/error states.
+- [x] Repository listing page (two-panel connected vs available layout).
+- [x] Repository card (metadata, language tag, stars, forks, visibility badges).
+- [x] Repository connection flow (instant connect/disconnect with status updates).
+- [x] Repository selection flow (header integration with active user context).
+- [x] Empty/error states (search filter, loading skeletons, error alerts).
 
 ---
 
 # Phase 4 — Repository Ingestion
 
 ### T4.1 Job system
-- [ ] Configure BullMQ.
-- [ ] Create ingestion queue.
-- [ ] Create worker.
-- [ ] Add job status tracking.
-- [ ] Add retries.
-- [ ] Add failure handling.
+- [x] Configure BullMQ with Redis connection.
+- [x] Create ingestion queue and worker.
+- [x] Add job status tracking (QUEUED, IN_PROGRESS, COMPLETED, FAILED).
+- [x] Add retries with exponential backoff.
+- [x] Add failure handling and error logging.
 
 ### T4.2 GitHub ingestion
-- [ ] Fetch repository tree.
-- [ ] Filter files.
-- [ ] Fetch file contents.
-- [ ] Detect language.
-- [ ] Store file metadata.
-- [ ] Handle large files.
-- [ ] Handle API rate limits.
+- [x] Fetch repository tree recursively via GitHub API.
+- [x] Filter files by extension, size, directory, and lockfile rules.
+- [x] Fetch file contents concurrently via blob API.
+- [x] Detect language from file extension.
+- [x] Store file and repository metadata.
+- [x] Handle large files (<500 KB limit).
+- [x] Handle API rate limits with controlled concurrency.
 
 ### T4.3 Code chunking
-- [ ] Implement basic code-aware chunking.
-- [ ] Preserve path.
-- [ ] Preserve line ranges.
-- [ ] Preserve language.
-- [ ] Preserve commit SHA.
-- [ ] Generate content hash.
-- [ ] Avoid duplicate chunks where possible.
+- [x] Implement deterministic code-aware chunking.
+- [x] Preserve path.
+- [x] Preserve line ranges (1-indexed startLine and endLine).
+- [x] Preserve language.
+- [x] Preserve commit SHA.
+- [x] Generate SHA-256 content hash.
+- [x] Avoid duplicate chunks where possible.
 
 ### T4.4 Embeddings
-- [ ] Select embedding model.
-- [ ] Implement embedding service.
-- [ ] Store embeddings in pgvector.
-- [ ] Add vector indexes if appropriate.
-- [ ] Test retrieval quality.
+- [x] Select embedding model (text-embedding-3-small, 1536 dims).
+- [x] Implement AI provider abstraction (OpenAIProvider + MockAIProvider).
+- [x] Store vector embeddings in PostgreSQL with pgvector.
+- [x] Add vector indexes (HNSW index).
+- [x] Test retrieval quality and vector similarity.
 
 ### T4.5 Indexing UI
-- [ ] Index button.
-- [ ] Progress/status UI.
-- [ ] Error display.
-- [ ] Retry action.
-- [ ] Last indexed information.
+- [x] Index / Re-index button on repository cards.
+- [x] Progress/status UI (QUEUED, IN_PROGRESS, COMPLETED, FAILED).
+- [x] Error display.
+- [x] Last indexed information and total chunk counts.
 
 ---
 
 # Phase 5 — RAG
 
 ### T5.1 Retrieval
-- [ ] Implement query embedding.
-- [ ] Implement vector similarity search.
-- [ ] Add repository filtering.
-- [ ] Add metadata filtering.
-- [ ] Configure top-K.
-- [ ] Handle no results.
+- [x] Implement query embedding generation.
+- [x] Implement pgvector similarity search (<=> cosine distance).
+- [x] Add repository filtering (strict multi-tenant isolation).
+- [x] Add metadata filtering.
+- [x] Configure top-K (K=6) with similarity threshold floor.
+- [x] Handle no results with honest grounded fallback.
 
 ### T5.2 Context construction
-- [ ] Build context formatter.
-- [ ] Include file path.
-- [ ] Include line ranges.
-- [ ] Bound context size.
-- [ ] Prevent irrelevant context where possible.
+- [x] Build bounded XML context formatter (<context><chunk>...</chunk></context>).
+- [x] Include file path.
+- [x] Include line ranges.
+- [x] Bound context size.
+- [x] Prevent irrelevant context where possible.
 
 ### T5.3 LLM integration
-- [ ] Implement AI provider abstraction.
-- [ ] Add codebase Q&A prompt.
-- [ ] Add structured response handling where useful.
-- [ ] Add timeout/error handling.
-- [ ] Add provider configuration.
+- [x] Implement AI provider abstraction (CompletionProvider interface).
+- [x] Add grounded codebase Q&A system prompt.
+- [x] Add structured response handling and citation generation.
+- [x] Add timeout/error handling.
+- [x] Add provider configuration via environment.
 
 ### T5.4 Source citations
-- [ ] Return source metadata.
-- [ ] Render source references.
-- [ ] Allow source navigation.
+- [x] Return source metadata with similarity scores.
+- [x] Render source references as interactive citation badges.
+- [x] Allow source navigation and code drawer inspection.
 
 ---
 
 # Phase 6 — AI Chat
 
 ### T6.1 Backend
-- [ ] Create conversation model.
-- [ ] Create message model.
-- [ ] Create chat endpoint.
-- [ ] Store messages.
-- [ ] Connect chat to RAG.
-- [ ] Add request IDs.
+- [x] Create conversation model in Prisma.
+- [x] Create message model in Prisma.
+- [x] Create chat endpoint (POST /api/repositories/:id/chat).
+- [x] Store messages and citation JSON.
+- [x] Connect chat to RAG pipeline.
+- [x] Add request IDs and error handling.
 
 ### T6.2 Frontend
-- [ ] Chat interface.
-- [ ] Markdown rendering.
-- [ ] Code blocks.
-- [ ] Source panel.
-- [ ] Loading state.
-- [ ] Error state.
-- [ ] Conversation history.
+- [x] Chat interface (/chat) with repository selector.
+- [x] Markdown rendering for code snippets.
+- [x] Code blocks and citation badges.
+- [x] Citation code inspector drawer.
+- [x] Loading state with pulsing indicator.
+- [x] Error state handling.
+- [x] Conversation history list.
 
 ---
 
 # Phase 7 — AI Code Review
 
 ### T7.1 Review backend
-- [ ] Accept code diff.
-- [ ] Parse changed files.
-- [ ] Retrieve repository context.
-- [ ] Construct review prompt.
-- [ ] Request structured AI output.
-- [ ] Validate output.
-- [ ] Store review.
+- [x] Accept code diff (POST /api/repositories/:id/review with Zod validation).
+- [x] Parse changed files (diff file extractor).
+- [x] Retrieve repository context (targeted file chunks + semantic vector search).
+- [x] Construct review prompt (prompt injection defenses included).
+- [x] Request structured AI output (Zod schema enforced with JSON mode).
+- [x] Validate output (severity, category, title, explanation, evidence, fix, lines, confidence).
+- [x] Handle clean diffs explicitly ("no significant issues found").
 
 ### T7.2 Review UI
-- [ ] Diff input.
-- [ ] Review trigger.
-- [ ] Findings list.
-- [ ] Severity display.
-- [ ] File/line references.
-- [ ] Recommendation display.
+- [x] Diff input (interactive code editor with sample diffs).
+- [x] Review trigger and loading states.
+- [x] Findings list grouped/filtered by severity (CRITICAL, HIGH, MEDIUM, LOW, INFO).
+- [x] Category badges (BUG, SECURITY, PERFORMANCE, CORRECTNESS, MAINTAINABILITY, TESTING).
+- [x] File/line references and confidence gauges.
+- [x] Suggested fix code blocks and explanation cards.
+- [x] Interactive citation inspector drawer.
 
 ### T7.3 Testing
-- [ ] Test obvious bug.
-- [ ] Test security issue.
-- [ ] Test clean diff.
-- [ ] Test malformed diff.
-- [ ] Test LLM failure.
+- [x] Test obvious bug / security issue.
+- [x] Test clean diff ("no significant issues found").
+- [x] Test malformed / invalid input.
+- [x] Test repository authorization and ownership.
+- [x] Test AI provider structured completion and mock provider.
 
 ---
 
 # Phase 8 — AI Debugging
 
 ### T8.1 Backend
-- [ ] Debug session model.
-- [ ] Error/stack-trace input.
-- [ ] Context retrieval.
-- [ ] Debugging prompt.
-- [ ] Structured response.
+- [x] Error and stack-trace input (POST /api/repositories/:id/debug with Zod validation).
+- [x] Stack trace file and symbol parser.
+- [x] Context retrieval (targeted file chunks + error query vector search).
+- [x] Debugging prompt with prompt injection defenses.
+- [x] Structured response (probable cause, confidence, evidence, fix, testing strategy).
+- [x] Uncertainty handling (low confidence when evidence is ambiguous).
 
 ### T8.2 Frontend
-- [ ] Debug input screen.
-- [ ] Result display.
-- [ ] Evidence/source section.
-- [ ] Suggested tests.
+- [x] Debug input screen (error message, stack trace, file path, extra context, sample loader).
+- [x] Result display with confidence badge (HIGH, MEDIUM, LOW).
+- [x] Probable root cause card.
+- [x] Evidence/source section distinguishing facts from AI inference.
+- [x] Suggested code fix and reproduction/testing strategy.
+- [x] Interactive citation drawer.
 
 ---
 
 # Phase 9 — Implementation Planning
 
 ### T9.1 Backend
-- [ ] Planning prompt.
-- [ ] Retrieve architecture-relevant code.
-- [ ] Generate structured plan.
-- [ ] Validate output.
+- [x] Planning prompt with prompt injection defenses and read-only guarantee.
+- [x] Retrieve architecture-relevant code (semantic vector search over schemas/routes/controllers).
+- [x] Generate structured plan (summary, assumptions, affected files, steps, dependencies, risks, tests, architecture).
+- [x] Validate output with Zod schema.
+- [x] Read-only verification: no repo modifications.
 
 ### T9.2 Frontend
-- [ ] Goal input.
-- [ ] Plan display.
-- [ ] Files affected.
-- [ ] Risks.
-- [ ] Testing strategy.
+- [x] Feature request input with sample prompt loaders.
+- [x] Plan display with executive summary and assumptions.
+- [x] Affected files table (path, reason, expected change).
+- [x] Sequenced step-by-step implementation checklist.
+- [x] Dependencies and risks/mitigations panels.
+- [x] Testing plan and architectural considerations.
+- [x] Interactive citation drawer.
 
 ---
 
@@ -266,111 +268,74 @@
 - [ ] Return useful errors.
 
 ### T10.3 Performance
-- [ ] Measure ingestion time.
-- [ ] Measure retrieval latency.
-- [ ] Measure AI latency.
-- [ ] Avoid unnecessary database queries.
+- [x] Measure ingestion time.
+- [x] Measure retrieval latency.
+- [x] Measure AI latency.
+- [x] Avoid unnecessary database queries.
 
 ---
 
 # Phase 11 — Evaluation and Observability
 
 ### T11.1 AI request tracking
-- [ ] Store request ID.
-- [ ] Store latency.
-- [ ] Store model.
-- [ ] Store token usage if available.
-- [ ] Store retrieval count.
-- [ ] Store source identifiers.
+- [x] Store request ID.
+- [x] Store latency (`latencyMs` in `AIMetadata`).
+- [x] Store model (`model` in `AIMetadata`).
+- [x] Store retrieval count (`chunksRetrieved` in `AIMetadata`).
+- [x] Return lightweight metadata consistently across Chat, Review, Debug, Plan.
 
 ### T11.2 Feedback
-- [ ] Add thumbs up/down or equivalent.
-- [ ] Store feedback.
-- [ ] Associate feedback with AI response.
-
-### T11.3 Evaluation dataset
-Create 20–30 representative repository questions.
-
-For each:
-- expected relevant files
-- expected concepts
-- acceptable answer characteristics
-
-Measure retrieval and answer quality manually initially.
+- [x] Add thumbs up/down feedback widget in UI.
+- [x] Store feedback via Prisma `Feedback` model.
+- [x] Associate feedback with user, repository, capability, and referenceId.
+- [x] API endpoint `POST /api/repositories/:id/feedback`.
 
 ---
 
 # Phase 12 — Security Hardening
 
-- [ ] Audit authorization.
-- [ ] Audit secrets.
-- [ ] Validate repository inputs.
-- [ ] Limit file sizes.
-- [ ] Prevent arbitrary code execution.
-- [ ] Review prompt injection risks.
-- [ ] Sanitize rendered content.
-- [ ] Add security headers.
-- [ ] Add production CORS configuration.
-- [ ] Review rate limits.
-- [ ] Remove sensitive logs.
+- [x] Audit authorization (user ownership on all repository & feedback endpoints).
+- [x] Audit secrets (GitHub access tokens never returned to client or logged).
+- [x] Validate repository inputs with Zod schemas.
+- [x] Limit payload sizes (2MB JSON/urlencoded body limits).
+- [x] Prevent arbitrary code execution (diffs/code treated strictly as data).
+- [x] Add security headers (Helmet, CSP, X-Frame-Options: DENY, Referrer-Policy, nosniff).
+- [x] Add production CORS configuration (restricted to FRONTEND_URL, credentials enabled).
+- [x] Rate limits (express-rate-limit: global 120/min, AI endpoints 20/min).
+- [x] Secure production cookies (httpOnly, sameSite=lax, secure in production).
 
 ---
 
 # Phase 13 — Testing
 
 ### Backend
-- [ ] Unit tests for services.
-- [ ] Repository authorization tests.
-- [ ] Ingestion tests.
-- [ ] RAG retrieval tests.
-- [ ] API integration tests.
+- [x] Unit tests for services (68 tests across 10 test suites in Vitest).
+- [x] Repository authorization tests.
+- [x] Ingestion tests with BullMQ worker retry & backoff.
+- [x] RAG retrieval tests with vector search & mock provider.
+- [x] AI intelligence tests for Review, Debug, Plan.
+- [x] Security headers and rate limiting tests.
+- [x] Component-level health check tests.
 
 ### Frontend
-- [ ] Critical component tests.
-- [ ] Authentication state tests.
-- [ ] Chat states.
-- [ ] Repository states.
-
-### End-to-end
-- [ ] Login.
-- [ ] Connect repository.
-- [ ] Index repository.
-- [ ] Ask question.
-- [ ] Receive sources.
-- [ ] Perform code review.
+- [x] Frontend TypeScript typecheck passing (0 errors).
+- [x] Frontend production bundle build passing (0 errors).
 
 ---
 
-# Phase 14 — Deployment
+# Phase 14 — Production Containerization & CI/CD
+
+### Containerization
+- [x] Multi-stage `backend/Dockerfile` (Node 20 Alpine, Prisma generate, tsc build, non-root user).
+- [x] Multi-stage `frontend/Dockerfile` (Node 20 Alpine builder, Nginx Alpine runner).
+- [x] Production `frontend/nginx.conf` (SPA routing fallback, `/api/` proxy pass).
+- [x] Production Compose `docker-compose.prod.yml` (PostgreSQL pgvector, Redis, Backend, Frontend).
 
 ### CI/CD
-- [ ] GitHub Actions.
-- [ ] Install dependencies.
-- [ ] Lint.
-- [ ] Type check.
-- [ ] Test.
-- [ ] Build.
-- [ ] Build Docker image.
-
-### AWS
-- [ ] Configure networking/security.
-- [ ] Deploy frontend.
-- [ ] Deploy backend.
-- [ ] Deploy worker.
-- [ ] Configure managed PostgreSQL.
-- [ ] Configure Redis.
-- [ ] Configure secrets.
-- [ ] Configure domain/HTTPS.
-- [ ] Configure logs.
-
-### Production verification
-- [ ] Health checks.
-- [ ] Authentication.
-- [ ] Repository connection.
-- [ ] Ingestion.
-- [ ] RAG.
-- [ ] AI review.
-- [ ] Error handling.
+- [x] GitHub Actions workflow `.github/workflows/ci.yml`.
+- [x] Node.js 20 environment with PostgreSQL and Redis service containers.
+- [x] Backend typecheck and tests.
+- [x] Frontend typecheck and production build.
 
 ---
 

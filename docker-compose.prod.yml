@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: devintel-prod-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-devintel_ai}
+    ports:
+      - "5432:5432"
+    volumes:
+      - prod_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d devintel_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - devintel-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: devintel-prod-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - prod_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - devintel-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: devintel-prod-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-devintel_ai}
+      REDIS_URL: redis://redis:6379
+      SESSION_SECRET: ${SESSION_SECRET:-supersecretprodsessionkeymin32chars}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-dummy_client_id}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-dummy_client_secret}
+      GITHUB_CALLBACK_URL: ${GITHUB_CALLBACK_URL:-http://localhost/api/auth/github/callback}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-dummy_openai_key}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-120}
+      AI_RATE_LIMIT_MAX_REQUESTS: ${AI_RATE_LIMIT_MAX_REQUESTS:-20}
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - devintel-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: devintel-prod-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    networks:
+      - devintel-net
+
+volumes:
+  prod_pgdata:
+    driver: local
+  prod_redisdata:
+    driver: local
+
+networks:
+  devintel-net:
+    driver: bridge
