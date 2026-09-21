@@ -13,6 +13,7 @@ COPY vite.config.ts ./
 COPY index.html ./
 COPY postcss.config.js ./
 COPY tailwind.config.js ./
+COPY public ./public
 COPY src ./src
 
 RUN npm run build
