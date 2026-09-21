@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { RepositoryProvider } from './contexts/RepositoryContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AppLayout } from './components/layout/AppLayout';
 import { DashboardPage } from './pages/DashboardPage';
@@ -31,30 +32,33 @@ export const App: React.FC = () => {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          {/* Public login route */}
-          <Route path="/login" element={<LoginPage />} />
+        <RepositoryProvider>
+          <Routes>
+            {/* Public login route */}
+            <Route path="/login" element={<LoginPage />} />
 
-          {/* Protected platform routes */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <AppLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<DashboardPage />} />
-            <Route path="repositories" element={<RepositoriesPage />} />
-            <Route path="chat" element={<ChatPage />} />
-            <Route path="review" element={<ReviewPage />} />
-            <Route path="debug" element={<DebugPage />} />
-            <Route path="plans" element={<PlansPage />} />
-            <Route path="codebase" element={<PlaceholderPage title="Codebase Explorer" phase="Phase 4" />} />
-            <Route path="activity" element={<PlaceholderPage title="Activity & Observability" phase="Phase 11" />} />
-            <Route path="settings" element={<PlaceholderPage title="Platform Settings" phase="Phase 12" />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
+            {/* Protected platform routes */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<DashboardPage />} />
+              <Route path="dashboard" element={<Navigate to="/" replace />} />
+              <Route path="repositories" element={<RepositoriesPage />} />
+              <Route path="chat" element={<ChatPage />} />
+              <Route path="review" element={<ReviewPage />} />
+              <Route path="debug" element={<DebugPage />} />
+              <Route path="plans" element={<PlansPage />} />
+              <Route path="codebase" element={<PlaceholderPage title="Codebase Explorer" phase="Phase 4" />} />
+              <Route path="activity" element={<PlaceholderPage title="Activity & Observability" phase="Phase 11" />} />
+              <Route path="settings" element={<PlaceholderPage title="Platform Settings" phase="Phase 12" />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          </Routes>
+        </RepositoryProvider>
       </AuthProvider>
     </BrowserRouter>
   );

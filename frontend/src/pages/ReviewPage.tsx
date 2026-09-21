@@ -1,70 +1,33 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Repository } from '../types/auth';
+import { useRepository } from '../contexts/RepositoryContext';
 import {
   CodeReviewResult,
   Severity,
   Citation,
 } from '../types/intelligence';
-import { fetchConnectedRepositories, reviewCode } from '../services/api';
+import { reviewCode } from '../services/api';
+import { DiffViewer } from '../components/common/DiffViewer';
+import { SeverityBadge } from '../components/common/SeverityBadge';
+import { SourceInspector } from '../components/common/SourceInspector';
+import { FeedbackWidget } from '../components/FeedbackWidget';
 import {
   FileCheck2,
   FolderGit2,
   AlertTriangle,
-  ShieldAlert,
   CheckCircle2,
-  Info,
   Loader2,
-  ChevronDown,
-  ChevronRight,
-  ExternalLink,
   X,
   FileCode,
   Sparkles,
   RotateCcw,
+  BookOpen,
+  Edit3,
+  ExternalLink,
+  ChevronDown,
+  ChevronRight,
+  Shield,
 } from 'lucide-react';
-import { FeedbackWidget } from '../components/FeedbackWidget';
-
-const severityConfig: Record<
-  Severity,
-  { label: string; color: string; bg: string; border: string; icon: React.ComponentType<{ className?: string }> }
-> = {
-  CRITICAL: {
-    label: 'Critical',
-    color: 'text-red-400',
-    bg: 'bg-red-500/10',
-    border: 'border-red-500/30',
-    icon: ShieldAlert,
-  },
-  HIGH: {
-    label: 'High',
-    color: 'text-orange-400',
-    bg: 'bg-orange-500/10',
-    border: 'border-orange-500/30',
-    icon: AlertTriangle,
-  },
-  MEDIUM: {
-    label: 'Medium',
-    color: 'text-yellow-400',
-    bg: 'bg-yellow-500/10',
-    border: 'border-yellow-500/30',
-    icon: AlertTriangle,
-  },
-  LOW: {
-    label: 'Low',
-    color: 'text-blue-400',
-    bg: 'bg-blue-500/10',
-    border: 'border-blue-500/30',
-    icon: Info,
-  },
-  INFO: {
-    label: 'Info',
-    color: 'text-purple-400',
-    bg: 'bg-purple-500/10',
-    border: 'border-purple-500/30',
-    icon: Info,
-  },
-};
 
 const sampleDiff = `diff --git a/backend/src/routes/user.routes.ts b/backend/src/routes/user.routes.ts
 --- a/backend/src/routes/user.routes.ts
@@ -79,37 +42,25 @@ export const ReviewPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const repoParam = searchParams.get('repo');
 
-  const [repositories, setRepositories] = useState<Repository[]>([]);
-  const [selectedRepoId, setSelectedRepoId] = useState<string>('');
-  const [diffInput, setDiffInput] = useState<string>('');
-  const [titleInput, setTitleInput] = useState<string>('');
+  const { repositories, selectedRepoId, selectedRepo, selectedBranch, setSelectedRepoId } = useRepository();
+
+  const [diffInput, setDiffInput] = useState<string>(sampleDiff);
+  const [titleInput, setTitleInput] = useState<string>('Refactor user lookup and route');
   const [descInput, setDescInput] = useState<string>('');
-  const [loadingRepos, setLoadingRepos] = useState(true);
+  const [showInputModal, setShowInputModal] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [reviewResult, setReviewResult] = useState<CodeReviewResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [expandedFindings, setExpandedFindings] = useState<Record<number, boolean>>({});
-  const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
   const [filterSeverity, setFilterSeverity] = useState<string>('ALL');
+  const [expandedFindings, setExpandedFindings] = useState<Record<number, boolean>>({ 0: true });
+  const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
+  const [showInspector, setShowInspector] = useState(false);
 
   useEffect(() => {
-    fetchConnectedRepositories()
-      .then((res) => {
-        const repos = res.data || [];
-        setRepositories(repos);
-        if (repos.length > 0) {
-          if (repoParam && repos.some((r) => r.id === repoParam)) {
-            setSelectedRepoId(repoParam);
-          } else {
-            setSelectedRepoId(repos[0].id);
-          }
-        }
-      })
-      .catch((err) => {
-        setErrorMessage(err instanceof Error ? err.message : 'Failed to load repositories');
-      })
-      .finally(() => setLoadingRepos(false));
-  }, [repoParam]);
+    if (repoParam && repositories.some((r) => r.id === repoParam)) {
+      setSelectedRepoId(repoParam);
+    }
+  }, [repoParam, repositories, setSelectedRepoId]);
 
   const handleReview = async () => {
     if (!selectedRepoId) {
@@ -123,7 +74,7 @@ export const ReviewPage: React.FC = () => {
 
     setReviewing(true);
     setErrorMessage(null);
-    setReviewResult(null);
+    setShowInputModal(false);
 
     try {
       const res = await reviewCode(selectedRepoId, {
@@ -134,9 +85,11 @@ export const ReviewPage: React.FC = () => {
 
       if (res.data) {
         setReviewResult(res.data);
-        // Expand the first finding by default if present
         if (res.data.findings.length > 0) {
           setExpandedFindings({ 0: true });
+        }
+        if (res.data.citations && res.data.citations.length > 0) {
+          setSelectedCitation(res.data.citations[0]);
         }
       }
     } catch (err) {
@@ -150,242 +103,310 @@ export const ReviewPage: React.FC = () => {
     setExpandedFindings((prev) => ({ ...prev, [idx]: !prev[idx] }));
   };
 
-  const filteredFindings = reviewResult
-    ? reviewResult.findings.filter((f) => filterSeverity === 'ALL' || f.severity === filterSeverity)
-    : [];
+  // Derive counts from actual findings
+  const findings = reviewResult?.findings || [];
+  const severityCounts: Record<string, number> = {
+    CRITICAL: 0,
+    HIGH: 0,
+    MEDIUM: 0,
+    LOW: 0,
+    INFO: 0,
+  };
+  const categoryCounts: Record<string, number> = {};
 
-  const severityCounts = reviewResult
-    ? reviewResult.findings.reduce((acc, f) => {
-        acc[f.severity] = (acc[f.severity] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>)
-    : {};
+  findings.forEach((f) => {
+    if (severityCounts[f.severity] !== undefined) {
+      severityCounts[f.severity]++;
+    }
+    categoryCounts[f.category] = (categoryCounts[f.category] || 0) + 1;
+  });
+
+  const filteredFindings = findings.filter((f) => {
+    return filterSeverity === 'ALL' || f.severity === filterSeverity;
+  });
+
+  if (!selectedRepo) {
+    return (
+      <div className="p-12 text-center bg-[#121721] border border-[#232b3b] rounded-2xl space-y-4">
+        <FolderGit2 className="w-10 h-10 text-[#8b949e] mx-auto opacity-60" />
+        <h2 className="text-sm font-bold text-[#f0f6fc]">No Repository Selected</h2>
+        <p className="text-xs text-[#8b949e] max-w-sm mx-auto">
+          Please select or connect a repository first to run AI code reviews.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#30363d] pb-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-[#f0f6fc]">AI Code Review</h1>
-            <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-[#1f6feb]/15 text-[#58a6ff] border border-[#1f6feb]/30">
-              Milestone 4
-            </span>
-          </div>
-          <p className="text-xs text-[#8b949e] mt-1">
-            Ground your pull request diffs against indexed repository architecture, security, and conventions.
-          </p>
-        </div>
-
-        {/* Repository selector */}
-        <div className="flex items-center gap-2">
-          <FolderGit2 className="w-4 h-4 text-[#8b949e]" />
-          <select
-            value={selectedRepoId}
-            onChange={(e) => {
-              setSelectedRepoId(e.target.value);
-              setReviewResult(null);
-            }}
-            disabled={loadingRepos || reviewing}
-            className="bg-[#161b22] border border-[#30363d] text-[#f0f6fc] text-xs rounded-md px-3 py-1.5 focus:outline-none focus:border-[#58a6ff]"
-          >
-            {loadingRepos ? (
-              <option>Loading repositories...</option>
-            ) : repositories.length === 0 ? (
-              <option>No repositories connected</option>
-            ) : (
-              repositories.map((repo) => (
-                <option key={repo.id} value={repo.id}>
-                  {repo.fullName}
-                </option>
-              ))
-            )}
-          </select>
-        </div>
-      </div>
-
-      {/* Error notification */}
+    <div className="space-y-5 pb-12">
+      {/* Notifications */}
       {errorMessage && (
-        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center justify-between text-xs text-red-400">
+        <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-xs text-rose-400 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>{errorMessage}</span>
           </div>
-          <button
-            onClick={() => setErrorMessage(null)}
-            className="text-red-400 hover:text-red-300"
-          >
+          <button type="button" onClick={() => setErrorMessage(null)} className="opacity-70 hover:opacity-100">
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* Main Grid: Diff Editor on Left, Review Output on Right */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Input Form */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#f0f6fc] uppercase tracking-wider font-mono">
-                Diff Input
+      {/* Top Header & Action Bar */}
+      <div className="p-4 rounded-2xl bg-[#121721] border border-[#232b3b] space-y-3">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="w-2.5 h-2.5 rounded bg-[#1f6feb] shrink-0"></span>
+              <h1 className="text-lg font-bold text-[#f0f6fc]">
+                AI Code Review
+              </h1>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#1c2433] text-[#58a6ff] border border-[#2b374d]">
+                RAG GROUNDED
               </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setDiffInput(sampleDiff);
-                  setTitleInput('Refactor user lookup and route');
-                }}
-                className="text-[11px] text-[#58a6ff] hover:underline flex items-center gap-1"
-              >
-                <Sparkles className="w-3 h-3" />
-                Load Sample Diff
-              </button>
             </div>
+            <p className="text-xs text-[#8b949e]">
+              Analyze a Git diff against indexed repository context using semantic vector retrieval. Strictly read-only analysis.
+            </p>
+          </div>
 
-            <div>
-              <label className="block text-[11px] text-[#8b949e] mb-1 font-mono">
-                PR / Commit Title (Optional)
-              </label>
-              <input
-                type="text"
-                value={titleInput}
-                onChange={(e) => setTitleInput(e.target.value)}
-                placeholder="e.g. Add authentication middleware to user routes"
-                className="w-full bg-[#0d1117] border border-[#30363d] rounded px-3 py-1.5 text-xs text-[#f0f6fc] focus:outline-none focus:border-[#58a6ff]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] text-[#8b949e] mb-1 font-mono">
-                PR / Change Description (Optional)
-              </label>
-              <textarea
-                value={descInput}
-                onChange={(e) => setDescInput(e.target.value)}
-                placeholder="e.g. Summarize context or purpose of this change..."
-                rows={2}
-                className="w-full bg-[#0d1117] border border-[#30363d] rounded p-2.5 text-xs text-[#f0f6fc] focus:outline-none focus:border-[#58a6ff] resize-y"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] text-[#8b949e] mb-1 font-mono">
-                Unified Git Diff *
-              </label>
-              <textarea
-                value={diffInput}
-                onChange={(e) => setDiffInput(e.target.value)}
-                placeholder="Paste unified git diff here (e.g. diff --git a/... b/...)..."
-                rows={14}
-                className="w-full bg-[#0d1117] border border-[#30363d] rounded p-3 text-xs text-[#f0f6fc] font-mono leading-relaxed focus:outline-none focus:border-[#58a6ff] resize-y"
-              />
-            </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Repo selector dropdown */}
+            <select
+              value={selectedRepoId || ''}
+              onChange={(e) => setSelectedRepoId(e.target.value)}
+              className="px-2.5 py-1.5 rounded-lg bg-[#18202d] border border-[#2b374d] text-xs font-semibold text-[#f0f6fc] focus:outline-none"
+            >
+              {repositories.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.fullName}
+                </option>
+              ))}
+            </select>
 
             <button
+              type="button"
+              onClick={() => setShowInputModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#18202d] hover:bg-[#232d3e] text-[#c9d1d9] hover:text-[#f0f6fc] border border-[#2b374d] text-xs font-mono transition-colors"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-[#58a6ff]" />
+              <span>Input & Diff</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleReview}
-              disabled={reviewing || !selectedRepoId || !diffInput.trim()}
-              className="w-full py-2 px-4 rounded bg-[#238636] hover:bg-[#2ea043] disabled:opacity-50 text-white text-xs font-semibold flex items-center justify-center gap-2 transition"
+              disabled={reviewing || !diffInput.trim()}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#1f6feb] hover:bg-[#388bfd] text-white text-xs font-semibold shadow-sm transition-colors disabled:opacity-50"
             >
               {reviewing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Analyzing Diff Against Codebase...
-                </>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
-                <>
-                  <FileCheck2 className="w-4 h-4" />
-                  Run AI Code Review
-                </>
+                <FileCheck2 className="w-3.5 h-3.5" />
               )}
+              <span>Analyze Diff</span>
             </button>
           </div>
         </div>
 
-        {/* Right: Review Findings & Results */}
-        <div className="lg:col-span-7 space-y-4">
+        {/* Telemetry / Context Sub-bar */}
+        <div className="pt-2 border-t border-[#1c2433] flex flex-wrap items-center justify-between gap-3 text-[11px] font-mono text-[#8b949e]">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[#c9d1d9] font-medium">
+              Repository: {selectedRepo.name}
+            </span>
+            <span>•</span>
+            <span className="text-[#58a6ff]">Branch: {selectedBranch}</span>
+            <span>•</span>
+            <span className="text-emerald-400 flex items-center gap-1">
+              <Shield className="w-3 h-3" /> Read-Only Safety Lock
+            </span>
+          </div>
+
+          {reviewResult?.meta && (
+            <div className="flex items-center gap-2.5">
+              {reviewResult.meta.latencyMs !== undefined && (
+                <span>⏱ {reviewResult.meta.latencyMs}ms</span>
+              )}
+              {reviewResult.meta.chunksRetrieved !== undefined && (
+                <span>• {reviewResult.meta.chunksRetrieved} chunks retrieved</span>
+              )}
+              {reviewResult.meta.model && (
+                <span>• {reviewResult.meta.model}</span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Main Split Workbench: Left Diff Viewer, Right Findings & Summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative">
+        {/* Left Column: Diff Viewer (lg: 6 or 7 cols) */}
+        <div className="lg:col-span-6 flex flex-col space-y-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-mono text-[#8b949e] uppercase tracking-wider text-[11px]">
+              Inspected Git Diff
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowInputModal(true)}
+              className="text-[#58a6ff] hover:underline text-xs flex items-center gap-1 font-mono"
+            >
+              <Edit3 className="w-3 h-3" />
+              <span>Edit diff</span>
+            </button>
+          </div>
+
+          <DiffViewer
+            diff={diffInput}
+            findings={findings}
+            onFindingClick={(_f, idx) => {
+              setExpandedFindings((prev) => ({ ...prev, [idx]: true }));
+            }}
+            className="flex-1 min-h-[500px]"
+          />
+        </div>
+
+        {/* Right Column: Review Summary & Findings Cards */}
+        <div className="lg:col-span-6 space-y-4">
           {reviewing ? (
-            <div className="p-12 bg-[#161b22] border border-[#30363d] rounded-lg text-center space-y-4">
+            <div className="p-16 rounded-2xl bg-[#121721] border border-[#232b3b] text-center space-y-4">
               <Loader2 className="w-8 h-8 animate-spin text-[#58a6ff] mx-auto" />
-              <div>
-                <h3 className="text-sm font-semibold text-[#f0f6fc]">
-                  Examining Diff & Repository Context
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-[#f0f6fc]">
+                  Analyzing Diff Against Indexed Codebase
                 </h3>
-                <p className="text-xs text-[#8b949e] mt-1 max-w-sm mx-auto">
-                  Retrieving relevant file chunks, checking security directives, and synthesizing structured findings.
+                <p className="text-xs text-[#8b949e] max-w-sm mx-auto">
+                  Retrieving relevant file vectors, verifying cryptographic and architectural patterns, and synthesizing structured findings.
                 </p>
               </div>
             </div>
           ) : !reviewResult ? (
-            <div className="p-12 bg-[#161b22] border border-[#30363d] rounded-lg text-center space-y-3">
-              <div className="w-10 h-10 rounded-full bg-[#1f6feb]/10 border border-[#1f6feb]/30 flex items-center justify-center text-[#58a6ff] mx-auto">
+            <div className="p-16 rounded-2xl bg-[#121721] border border-[#232b3b] text-center space-y-4">
+              <div className="w-10 h-10 rounded-xl bg-[#1f6feb]/15 border border-[#1f6feb]/35 flex items-center justify-center text-[#58a6ff] mx-auto">
                 <FileCheck2 className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-semibold text-[#f0f6fc]">No Review Generated Yet</h3>
-              <p className="text-xs text-[#8b949e] max-w-md mx-auto">
-                Select a repository, paste a git diff on the left, and click <strong>Run AI Code Review</strong> to identify bugs, security flaws, and architectural regressions.
-              </p>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-[#f0f6fc]">Ready for AI Code Review</h3>
+                <p className="text-xs text-[#8b949e] max-w-sm mx-auto">
+                  Click <strong>Analyze Diff</strong> to evaluate the current changes against your indexed codebase architecture.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleReview}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1f6feb] hover:bg-[#388bfd] text-white text-xs font-semibold shadow-sm"
+              >
+                <FileCheck2 className="w-4 h-4" />
+                <span>Analyze Diff Now</span>
+              </button>
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Review Summary Header */}
-              <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-4 space-y-3">
+              {/* Review Summary Card */}
+              <div className="p-5 rounded-2xl bg-[#121721] border border-[#232b3b] space-y-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <span className="text-xs font-semibold text-[#f0f6fc] uppercase tracking-wider font-mono">
-                      Review Summary
-                    </span>
-                    <p className="text-xs text-[#c9d1d9] mt-1 leading-relaxed">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xs font-bold uppercase tracking-wider font-mono text-[#f0f6fc]">
+                        Review Summary
+                      </h2>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#1c2433] text-[#58a6ff] border border-[#2b374d]">
+                        RAG Grounded
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#c9d1d9] leading-relaxed">
                       {reviewResult.summary}
                     </p>
                   </div>
                   <button
+                    type="button"
                     onClick={handleReview}
                     title="Re-run review"
-                    className="p-1.5 rounded hover:bg-[#21262d] text-[#8b949e] hover:text-[#f0f6fc]"
+                    className="p-1.5 rounded-lg hover:bg-[#18202d] text-[#8b949e] hover:text-[#f0f6fc] transition-colors"
                   >
                     <RotateCcw className="w-4 h-4" />
                   </button>
                 </div>
 
+                {/* Severity Metric Boxes Row */}
+                <div className="grid grid-cols-5 gap-2 text-center font-mono">
+                  <div className="p-2.5 rounded-xl bg-rose-950/20 border border-rose-500/25">
+                    <div className="text-base font-bold text-rose-400">
+                      {severityCounts.CRITICAL}
+                    </div>
+                    <div className="text-[10px] text-rose-300 uppercase">Critical</div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-orange-950/20 border border-orange-500/25">
+                    <div className="text-base font-bold text-orange-400">
+                      {severityCounts.HIGH}
+                    </div>
+                    <div className="text-[10px] text-orange-300 uppercase">High</div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-amber-950/20 border border-amber-500/25">
+                    <div className="text-base font-bold text-amber-400">
+                      {severityCounts.MEDIUM}
+                    </div>
+                    <div className="text-[10px] text-amber-300 uppercase">Medium</div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-[#0c1017] border border-[#232b3b]">
+                    <div className="text-base font-bold text-[#8b949e]">
+                      {severityCounts.LOW}
+                    </div>
+                    <div className="text-[10px] text-[#8b949e] uppercase">Low</div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-[#0c1017] border border-[#232b3b]">
+                    <div className="text-base font-bold text-[#8b949e]">
+                      {severityCounts.INFO}
+                    </div>
+                    <div className="text-[10px] text-[#8b949e] uppercase">Info</div>
+                  </div>
+                </div>
+
                 {/* Clean state banner */}
                 {!reviewResult.hasIssues && (
-                  <div className="p-3 rounded bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2.5 text-xs text-emerald-400">
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center gap-2.5 text-xs text-emerald-400 font-mono">
                     <CheckCircle2 className="w-4 h-4 shrink-0" />
                     <span>
-                      <strong>Clean diff:</strong> {reviewResult.noIssuesMessage || 'no significant issues found'}
+                      Clean diff: {reviewResult.noIssuesMessage || 'no significant issues or regressions flagged.'}
                     </span>
                   </div>
                 )}
 
                 {/* Severity Filter Pills */}
-                {reviewResult.findings.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[#30363d]">
+                {findings.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-[#1c2433]">
                     <button
+                      type="button"
                       onClick={() => setFilterSeverity('ALL')}
-                      className={`px-2.5 py-1 rounded text-xs font-mono font-medium transition ${
+                      className={`px-2.5 py-1 rounded-lg text-xs font-mono transition-colors ${
                         filterSeverity === 'ALL'
                           ? 'bg-[#1f6feb] text-white'
-                          : 'bg-[#21262d] text-[#8b949e] hover:text-[#f0f6fc]'
+                          : 'bg-[#141a24] text-[#8b949e] hover:text-[#f0f6fc]'
                       }`}
                     >
-                      All ({reviewResult.findings.length})
+                      All ({findings.length})
                     </button>
                     {(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'] as Severity[]).map((sev) => {
                       const count = severityCounts[sev] || 0;
                       if (count === 0) return null;
-                      const cfg = severityConfig[sev];
                       return (
                         <button
                           key={sev}
+                          type="button"
                           onClick={() => setFilterSeverity(sev)}
-                          className={`px-2.5 py-1 rounded text-xs font-mono font-medium transition flex items-center gap-1 ${
+                          className={`px-2.5 py-1 rounded-lg text-xs font-mono transition-colors border ${
                             filterSeverity === sev
-                              ? `${cfg.bg} ${cfg.color} border ${cfg.border}`
-                              : 'bg-[#21262d] text-[#8b949e] hover:text-[#f0f6fc]'
+                              ? 'bg-[#18202d] text-[#f0f6fc] border-[#384866]'
+                              : 'bg-[#141a24] text-[#8b949e] border-[#232b3b] hover:text-[#f0f6fc]'
                           }`}
                         >
-                          <span>{cfg.label}</span>
-                          <span className="text-[10px] opacity-75 font-mono">({count})</span>
+                          <span>{sev}</span>
+                          <span className="text-[10px] ml-1 opacity-75">({count})</span>
                         </button>
                       );
                     })}
@@ -397,55 +418,51 @@ export const ReviewPage: React.FC = () => {
               <div className="space-y-3">
                 {filteredFindings.map((finding, idx) => {
                   const isExpanded = !!expandedFindings[idx];
-                  const cfg = severityConfig[finding.severity] || severityConfig.INFO;
-                  const Icon = cfg.icon;
-
                   return (
                     <div
                       key={idx}
-                      className="bg-[#161b22] border border-[#30363d] rounded-lg overflow-hidden transition"
+                      className="rounded-2xl bg-[#121721] border border-[#232b3b] hover:border-[#35435c] overflow-hidden transition-all"
                     >
                       {/* Finding Card Header */}
                       <button
+                        type="button"
                         onClick={() => toggleFinding(idx)}
-                        className="w-full p-3.5 text-left flex items-start justify-between gap-3 hover:bg-[#21262d]/40 transition"
+                        className="w-full p-4 text-left flex items-start justify-between gap-3 hover:bg-[#18202d]/50 transition-colors"
                       >
-                        <div className="flex items-start gap-2.5">
-                          <div className={`p-1 rounded ${cfg.bg} ${cfg.color} mt-0.5`}>
-                            <Icon className="w-3.5 h-3.5" />
-                          </div>
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-xs font-semibold text-[#f0f6fc]">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <SeverityBadge severity={finding.severity} />
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold text-[#f0f6fc]">
                                 {finding.title}
                               </span>
-                              <span
-                                className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${cfg.bg} ${cfg.color} ${cfg.border}`}
-                              >
-                                {finding.severity}
-                              </span>
-                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#21262d] text-[#8b949e] border border-[#30363d]">
+                              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#18202d] text-[#8b949e] border border-[#273244]">
                                 {finding.category}
                               </span>
                             </div>
-                            <div className="text-[11px] text-[#8b949e] font-mono mt-1">
-                              {finding.filePath}:{finding.startLine}-{finding.endLine} • Confidence:{' '}
-                              {Math.round(finding.confidence * 100)}%
+                            <div className="text-[11px] font-mono text-[#8b949e] flex items-center gap-2">
+                              <span>{finding.filePath}:{finding.startLine}–{finding.endLine}</span>
+                              {finding.confidence > 0 && (
+                                <span>• Confidence: {Math.round(finding.confidence * 100)}%</span>
+                              )}
                             </div>
                           </div>
                         </div>
-                        {isExpanded ? (
-                          <ChevronDown className="w-4 h-4 text-[#8b949e] shrink-0 mt-1" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4 text-[#8b949e] shrink-0 mt-1" />
-                        )}
+
+                        <div className="shrink-0 text-[#8b949e] mt-1">
+                          {isExpanded ? (
+                            <ChevronDown className="w-4 h-4" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4" />
+                          )}
+                        </div>
                       </button>
 
-                      {/* Expandable Finding Details */}
+                      {/* Expandable Finding Body */}
                       {isExpanded && (
-                        <div className="p-4 pt-0 border-t border-[#30363d] space-y-3 bg-[#0d1117]/50">
-                          <div className="mt-3">
-                            <span className="text-[11px] font-mono uppercase tracking-wider text-[#8b949e] block mb-1">
+                        <div className="p-4 pt-0 border-t border-[#1c2433] bg-[#0c1017]/50 space-y-3">
+                          <div className="pt-3">
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-[#8b949e] block mb-1">
                               Explanation
                             </span>
                             <p className="text-xs text-[#c9d1d9] leading-relaxed">
@@ -453,25 +470,47 @@ export const ReviewPage: React.FC = () => {
                             </p>
                           </div>
 
+                          {/* Evidence snippet */}
                           {finding.evidence && (
                             <div>
-                              <span className="text-[11px] font-mono uppercase tracking-wider text-[#8b949e] block mb-1">
-                                Evidence / Triggering Code
+                              <span className="text-[10px] font-mono uppercase tracking-wider text-rose-400 block mb-1">
+                                Evidence (Detected in Diff)
                               </span>
-                              <pre className="p-2.5 rounded bg-[#161b22] border border-[#30363d] text-xs font-mono text-red-300 overflow-x-auto">
+                              <pre className="p-3 rounded-xl bg-[#0c1017] border border-rose-500/25 text-xs font-mono text-rose-300 overflow-x-auto leading-relaxed">
                                 {finding.evidence}
                               </pre>
                             </div>
                           )}
 
+                          {/* Suggested fix */}
                           {finding.suggestedFix && (
                             <div>
-                              <span className="text-[11px] font-mono uppercase tracking-wider text-[#8b949e] block mb-1">
-                                Suggested Fix
+                              <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 block mb-1">
+                                Standard Repository Pattern / Suggested Fix
                               </span>
-                              <pre className="p-2.5 rounded bg-[#161b22] border border-[#30363d] text-xs font-mono text-emerald-300 overflow-x-auto">
+                              <pre className="p-3 rounded-xl bg-[#0c1017] border border-emerald-500/25 text-xs font-mono text-emerald-300 overflow-x-auto leading-relaxed">
                                 {finding.suggestedFix}
                               </pre>
+                            </div>
+                          )}
+
+                          {/* Citations inspect link */}
+                          {reviewResult.citations.length > 0 && (
+                            <div className="pt-2 flex items-center justify-between text-xs">
+                              <span className="text-[11px] font-mono text-[#8b949e]">
+                                Source: {reviewResult.citations[0].filePath}:{reviewResult.citations[0].startLine}–{reviewResult.citations[0].endLine}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCitation(reviewResult.citations[0]);
+                                  setShowInspector(true);
+                                }}
+                                className="text-[11px] font-mono text-[#58a6ff] hover:underline flex items-center gap-1"
+                              >
+                                <span>Inspect Vector Evidence</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </button>
                             </div>
                           )}
                         </div>
@@ -479,25 +518,53 @@ export const ReviewPage: React.FC = () => {
                     </div>
                   );
                 })}
+
+                {filteredFindings.length === 0 && (
+                  <div className="p-8 rounded-2xl bg-[#121721] border border-[#232b3b] text-center space-y-3">
+                    <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400 mx-auto">
+                      <CheckCircle2 className="w-5 h-5" />
+                    </div>
+                    <div className="text-xs font-semibold text-[#f0f6fc]">No Issues Identified</div>
+                    <p className="text-xs text-[#8b949e] max-w-sm mx-auto">
+                      {findings.length === 0
+                        ? 'The AI reviewer found no critical, security, or quality issues in this changeset.'
+                        : `No findings match the selected severity filter (${filterSeverity}).`}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Citations Footer */}
               {reviewResult.citations.length > 0 && (
-                <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-4 space-y-2.5">
-                  <span className="text-xs font-semibold text-[#f0f6fc] uppercase tracking-wider font-mono flex items-center gap-1.5">
-                    <FileCode className="w-3.5 h-3.5 text-[#58a6ff]" />
-                    Repository Citations ({reviewResult.citations.length})
-                  </span>
+                <div className="p-4 rounded-2xl bg-[#121721] border border-[#232b3b] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-[#f0f6fc] font-mono flex items-center gap-2">
+                      <FileCode className="w-3.5 h-3.5 text-[#58a6ff]" />
+                      Repository Citations ({reviewResult.citations.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowInspector(!showInspector)}
+                      className="text-xs text-[#58a6ff] font-mono hover:underline flex items-center gap-1"
+                    >
+                      <BookOpen className="w-3 h-3" />
+                      <span>{showInspector ? 'Hide Inspector' : 'Open Inspector'}</span>
+                    </button>
+                  </div>
+
                   <div className="flex flex-wrap gap-2">
                     {reviewResult.citations.map((cit, cIdx) => (
                       <button
                         key={cIdx}
-                        onClick={() => setSelectedCitation(cit)}
-                        className="text-left px-2.5 py-1.5 rounded bg-[#0d1117] border border-[#30363d] hover:border-[#58a6ff] text-xs font-mono text-[#58a6ff] transition flex items-center gap-1.5"
+                        type="button"
+                        onClick={() => {
+                          setSelectedCitation(cit);
+                          setShowInspector(true);
+                        }}
+                        className="text-left px-2.5 py-1.5 rounded-lg bg-[#0c1017] border border-[#232b3b] hover:border-[#58a6ff] text-xs font-mono text-[#58a6ff] transition flex items-center gap-1.5"
                       >
-                        <span>
-                          {cit.filePath}:{cit.startLine}-{cit.endLine}
-                        </span>
+                        <span>{cit.filePath}</span>
+                        <span className="text-[#8b949e]">L{cit.startLine}–{cit.endLine}</span>
                         <ExternalLink className="w-3 h-3 text-[#8b949e]" />
                       </button>
                     ))}
@@ -505,8 +572,8 @@ export const ReviewPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Feedback and Observability */}
-              <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-4">
+              {/* Feedback Widget */}
+              <div className="p-4 rounded-2xl bg-[#121721] border border-[#232b3b]">
                 <FeedbackWidget
                   repositoryId={selectedRepoId}
                   capability="review"
@@ -518,56 +585,114 @@ export const ReviewPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Citation Inspector Drawer Modal */}
-      {selectedCitation && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex justify-end">
-          <div className="w-full max-w-lg bg-[#161b22] border-l border-[#30363d] h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-200">
-            <div className="h-14 px-5 border-b border-[#30363d] flex items-center justify-between">
+      {/* Floating or Docked Source Inspector Drawer */}
+      {showInspector && selectedCitation && (
+        <div className="fixed inset-y-0 right-0 z-50 flex shadow-2xl animate-in slide-in-from-right duration-200">
+          <SourceInspector
+            citation={selectedCitation}
+            onClose={() => setShowInspector(false)}
+            repoFullName={selectedRepo.fullName}
+            defaultBranch={selectedBranch}
+            githubBaseUrl={selectedRepo.githubUrl}
+          />
+        </div>
+      )}
+
+      {/* Input Modal for entering/editing diff */}
+      {showInputModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-[#121721] border border-[#232b3b] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-4 border-b border-[#232b3b] flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FileCode className="w-4 h-4 text-[#58a6ff]" />
-                <span className="font-semibold text-xs font-mono text-[#f0f6fc]">
-                  Citation Context
-                </span>
+                <FileCheck2 className="w-4 h-4 text-[#58a6ff]" />
+                <h3 className="text-sm font-bold text-[#f0f6fc]">
+                  Input Git Diff for Review
+                </h3>
               </div>
               <button
-                onClick={() => setSelectedCitation(null)}
-                className="p-1 rounded text-[#8b949e] hover:text-[#f0f6fc] hover:bg-[#21262d]"
+                type="button"
+                onClick={() => setShowInputModal(false)}
+                className="p-1 rounded hover:bg-[#18202d] text-[#8b949e] hover:text-[#f0f6fc]"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
+
             <div className="p-5 overflow-y-auto space-y-4 flex-1">
-              <div>
-                <label className="text-[11px] font-mono uppercase text-[#8b949e] block mb-1">
-                  File & Range
-                </label>
-                <div className="text-xs font-mono text-[#f0f6fc] bg-[#0d1117] p-2 rounded border border-[#30363d]">
-                  {selectedCitation.filePath}:{selectedCitation.startLine}-{selectedCitation.endLine}
-                  {selectedCitation.symbolName && (
-                    <span className="text-[#58a6ff] block mt-0.5">
-                      Symbol: {selectedCitation.symbolName}
-                    </span>
-                  )}
-                </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-[#8b949e] uppercase font-mono">
+                  PR / Diff Payload
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDiffInput(sampleDiff);
+                    setTitleInput('Refactor user lookup and route');
+                  }}
+                  className="text-xs text-[#58a6ff] hover:underline flex items-center gap-1 font-mono"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Load Sample Vulnerable Diff</span>
+                </button>
               </div>
 
               <div>
-                <label className="text-[11px] font-mono uppercase text-[#8b949e] block mb-1">
-                  Relevance Score
+                <label className="block text-[11px] font-mono text-[#8b949e] mb-1">
+                  Title (Optional)
                 </label>
-                <div className="text-xs font-mono text-[#3fb950]">
-                  {Math.round(selectedCitation.similarity * 100)}% match with review context
-                </div>
+                <input
+                  type="text"
+                  value={titleInput}
+                  onChange={(e) => setTitleInput(e.target.value)}
+                  placeholder="e.g. Refactor user authentication and SQL query"
+                  className="w-full px-3 py-1.5 rounded-lg bg-[#0c1017] border border-[#232b3b] text-xs text-[#f0f6fc] focus:outline-none focus:border-[#58a6ff]"
+                />
               </div>
 
               <div>
-                <label className="text-[11px] font-mono uppercase text-[#8b949e] block mb-1">
-                  Retrieved Code Snippet
+                <label className="block text-[11px] font-mono text-[#8b949e] mb-1">
+                  Description / Context (Optional)
                 </label>
-                <pre className="p-3 bg-[#0d1117] border border-[#30363d] rounded text-xs font-mono text-[#c9d1d9] overflow-x-auto leading-relaxed whitespace-pre-wrap">
-                  {selectedCitation.snippet}
-                </pre>
+                <textarea
+                  rows={2}
+                  value={descInput}
+                  onChange={(e) => setDescInput(e.target.value)}
+                  placeholder="e.g. Changed how user IDs are queried from database..."
+                  className="w-full p-2.5 rounded-lg bg-[#0c1017] border border-[#232b3b] text-xs text-[#f0f6fc] focus:outline-none focus:border-[#58a6ff] resize-none"
+                />
               </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-[#8b949e] mb-1">
+                  Unified Git Diff *
+                </label>
+                <textarea
+                  rows={10}
+                  value={diffInput}
+                  onChange={(e) => setDiffInput(e.target.value)}
+                  placeholder="Paste git diff here (diff --git a/... b/...)..."
+                  className="w-full p-3 rounded-lg bg-[#0c1017] border border-[#232b3b] text-xs font-mono text-[#f0f6fc] focus:outline-none focus:border-[#58a6ff] resize-y"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-[#232b3b] bg-[#0c1017] flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowInputModal(false)}
+                className="px-3 py-1.5 rounded-lg bg-[#18202d] text-[#8b949e] hover:text-[#f0f6fc] text-xs font-mono"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleReview}
+                disabled={reviewing || !diffInput.trim()}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#1f6feb] hover:bg-[#388bfd] text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                {reviewing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileCheck2 className="w-3.5 h-3.5" />}
+                <span>Run Code Review</span>
+              </button>
             </div>
           </div>
         </div>

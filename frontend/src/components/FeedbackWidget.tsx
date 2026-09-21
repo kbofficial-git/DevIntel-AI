@@ -4,7 +4,7 @@ import { submitFeedback } from '../services/api';
 import { AIMetadata } from '../types/intelligence';
 
 interface FeedbackWidgetProps {
-  repositoryId: string;
+  repositoryId?: string | null;
   capability: 'chat' | 'review' | 'debug' | 'plan';
   referenceId?: string;
   meta?: AIMetadata;
@@ -23,7 +23,7 @@ export const FeedbackWidget: React.FC<FeedbackWidgetProps> = ({
   const [submitted, setSubmitted] = useState(false);
 
   const handleRate = async (newRating: 1 | -1) => {
-    if (submitting || submitted) return;
+    if (submitting || submitted || !repositoryId) return;
     setSubmitting(true);
     try {
       const res = await submitFeedback(repositoryId, {
@@ -44,62 +44,66 @@ export const FeedbackWidget: React.FC<FeedbackWidgetProps> = ({
 
   return (
     <div
-      className={`flex flex-wrap items-center justify-between gap-3 pt-3 mt-3 border-t border-slate-800/80 text-xs text-slate-400 ${className}`}
+      className={`flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#232b3b] text-xs text-[#8b949e] ${className}`}
     >
-      {/* AI Observability Metadata */}
-      <div className="flex items-center gap-3 flex-wrap">
+      {/* AI Observability Metadata (only rendered if actually returned by backend) */}
+      <div className="flex items-center gap-2 flex-wrap text-[11px] font-mono">
         {meta?.latencyMs !== undefined && (
-          <span className="inline-flex items-center text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded font-mono">
-            <Clock className="w-3 h-3 mr-1 text-slate-400" />
+          <span className="inline-flex items-center text-[#8b949e] bg-[#121722] border border-[#232b3b] px-2 py-0.5 rounded">
+            <Clock className="w-3 h-3 mr-1 text-[#58a6ff]" />
             {meta.latencyMs}ms
           </span>
         )}
         {meta?.chunksRetrieved !== undefined && (
-          <span className="inline-flex items-center text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded font-mono">
-            <Layers className="w-3 h-3 mr-1 text-slate-400" />
+          <span className="inline-flex items-center text-[#8b949e] bg-[#121722] border border-[#232b3b] px-2 py-0.5 rounded">
+            <Layers className="w-3 h-3 mr-1 text-[#58a6ff]" />
             {meta.chunksRetrieved} chunk{meta.chunksRetrieved === 1 ? '' : 's'}
           </span>
         )}
         {meta?.model && (
-          <span className="inline-flex items-center text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded font-mono">
-            <Cpu className="w-3 h-3 mr-1 text-slate-400" />
+          <span className="inline-flex items-center text-[#8b949e] bg-[#121722] border border-[#232b3b] px-2 py-0.5 rounded">
+            <Cpu className="w-3 h-3 mr-1 text-[#a371f7]" />
             {meta.model}
           </span>
         )}
       </div>
 
       {/* Thumbs Feedback */}
-      <div className="flex items-center gap-1.5 ml-auto">
+      <div className="flex items-center gap-2 ml-auto">
         {submitted ? (
-          <span className="inline-flex items-center text-emerald-400 font-medium bg-emerald-950/40 border border-emerald-800/40 px-2 py-0.5 rounded">
+          <span className="inline-flex items-center text-emerald-400 font-medium bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded text-xs">
             <Check className="w-3 h-3 mr-1" /> Feedback recorded
           </span>
         ) : (
-          <div className="flex items-center gap-1">
-            <span className="text-slate-500 mr-1">Helpful?</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[#8b949e] text-xs">Was this helpful?</span>
             <button
+              type="button"
               onClick={() => handleRate(1)}
-              disabled={submitting}
+              disabled={submitting || !repositoryId}
               title="Helpful"
-              className={`p-1 rounded transition-colors ${
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors border ${
                 rating === 1
-                  ? 'text-emerald-400 bg-emerald-950/60'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/40'
+                  : 'text-[#8b949e] hover:text-[#f0f6fc] bg-[#141a24] hover:bg-[#1f2633] border-[#232b3b]'
               }`}
             >
-              <ThumbsUp className="w-3.5 h-3.5" />
+              <ThumbsUp className="w-3 h-3" />
+              <span>Yes</span>
             </button>
             <button
+              type="button"
               onClick={() => handleRate(-1)}
-              disabled={submitting}
+              disabled={submitting || !repositoryId}
               title="Not helpful"
-              className={`p-1 rounded transition-colors ${
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors border ${
                 rating === -1
-                  ? 'text-rose-400 bg-rose-950/60'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  ? 'text-rose-400 bg-rose-500/15 border-rose-500/40'
+                  : 'text-[#8b949e] hover:text-[#f0f6fc] bg-[#141a24] hover:bg-[#1f2633] border-[#232b3b]'
               }`}
             >
-              <ThumbsDown className="w-3.5 h-3.5" />
+              <ThumbsDown className="w-3 h-3" />
+              <span>No</span>
             </button>
           </div>
         )}
@@ -107,3 +111,4 @@ export const FeedbackWidget: React.FC<FeedbackWidgetProps> = ({
     </div>
   );
 };
+
