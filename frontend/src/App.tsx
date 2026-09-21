@@ -30,7 +30,7 @@ const PlaceholderPage: React.FC<{ title: string; phase: string }> = ({ title, ph
 
 export const App: React.FC = () => {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <AuthProvider>
         <RepositoryProvider>
           <Routes>
