@@ -1,20 +1,27 @@
 import React from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRepository } from '../../contexts/RepositoryContext';
-import { GitBranch, Bell, HelpCircle, ExternalLink, LogOut } from 'lucide-react';
+import { GitBranch, Bell, HelpCircle, ExternalLink, LogOut, Sparkles } from 'lucide-react';
 
 export const Header: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, isDemo, logout } = useAuth();
   const { selectedRepo, selectedBranch } = useRepository();
 
   return (
     <header className="h-14 bg-[#0f141d] border-b border-[#232b3b] px-4 md:px-6 flex items-center justify-between shrink-0 select-none">
       {/* Left: Status Pill & Breadcrumb */}
       <div className="flex items-center gap-3 min-w-0">
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 text-[11px] font-mono shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span>GitHub App: Active</span>
-        </div>
+        {isDemo ? (
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 text-[#58a6ff] border border-blue-500/25 text-[11px] font-mono shrink-0">
+            <Sparkles className="w-3 h-3 text-[#58a6ff]" />
+            <span>Showcase Demo Mode</span>
+          </div>
+        ) : (
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 text-[11px] font-mono shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>GitHub App: Active</span>
+          </div>
+        )}
 
         {/* Repository breadcrumb */}
         <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-[#8b949e] truncate">
@@ -95,4 +102,3 @@ export const Header: React.FC = () => {
     </header>
   );
 };
-

@@ -1,11 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User } from '../types/auth';
-import { fetchCurrentUser, logout as apiLogout } from '../services/api';
+import { fetchCurrentUser, logout as apiLogout, isDemoMode, setDemoMode } from '../services/api';
+import { DEMO_USER } from '../services/demoData';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   error: string | null;
+  isDemo: boolean;
+  loginDemoUser: () => void;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -16,11 +19,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [isDemo, setIsDemo] = useState<boolean>(isDemoMode());
 
   const loadUser = async () => {
     try {
       setLoading(true);
       setError(null);
+      if (isDemoMode()) {
+        setIsDemo(true);
+        setUser(DEMO_USER);
+        return;
+      }
+
       const res = await fetchCurrentUser();
       if (res.data) {
         setUser(res.data);
@@ -39,14 +49,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadUser();
   }, []);
 
+  const loginDemoUser = () => {
+    setDemoMode(true);
+    setIsDemo(true);
+    setUser(DEMO_USER);
+  };
+
   const logout = async () => {
     try {
       await apiLogout();
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
+      setDemoMode(false);
+      setIsDemo(false);
       setUser(null);
-      window.location.href = '/login';
+      const baseUrl = import.meta.env.BASE_URL || '/';
+      const cleanBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+      window.location.href = `${cleanBase}login`;
     }
   };
 
@@ -56,6 +76,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         loading,
         error,
+        isDemo,
+        loginDemoUser,
         logout,
         refreshUser: loadUser,
       }}
