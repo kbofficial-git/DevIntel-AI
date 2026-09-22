@@ -58,12 +58,7 @@ const DEMO_REPOS_STORAGE_KEY = 'devintel_demo_repositories';
 
 export function isDemoMode(): boolean {
   if (typeof window === 'undefined') return false;
-  const val = localStorage.getItem(DEMO_STORAGE_KEY);
-  if (val !== null) return val === 'true';
-  // Automatically default to demo mode if deployed on GitHub Pages and no custom backend URL is specified
-  const isGhPages = window.location.hostname.endsWith('github.io');
-  const hasCustomApi = Boolean(import.meta.env.VITE_API_URL);
-  return isGhPages && !hasCustomApi;
+  return localStorage.getItem(DEMO_STORAGE_KEY) === 'true';
 }
 
 export function setDemoMode(active: boolean): void {
@@ -146,20 +141,7 @@ export async function fetchCurrentUser(): Promise<ApiResponse<User>> {
     };
   }
 
-  try {
-    return await request<User>('/api/auth/me');
-  } catch (err) {
-    // If on GitHub Pages without demo mode explicitly turned off, activate demo mode
-    if (typeof window !== 'undefined' && window.location.hostname.endsWith('github.io')) {
-      setDemoMode(true);
-      return {
-        success: true,
-        data: DEMO_USER,
-        timestamp: new Date().toISOString(),
-      };
-    }
-    throw err;
-  }
+  return await request<User>('/api/auth/me');
 }
 
 export async function logout(): Promise<ApiResponse<{ message: string }>> {
