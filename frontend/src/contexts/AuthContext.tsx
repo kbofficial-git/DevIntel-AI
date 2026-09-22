@@ -31,6 +31,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
+      // On static GitHub Pages without an external backend, default immediately to unauthenticated
+      const isGhPages = typeof window !== 'undefined' && window.location.hostname.endsWith('github.io');
+      const hasCustomApi = Boolean(import.meta.env.VITE_API_URL);
+      if (isGhPages && !hasCustomApi) {
+        setIsDemo(false);
+        setUser(null);
+        return;
+      }
+
       const res = await fetchCurrentUser();
       if (res.data) {
         setUser(res.data);

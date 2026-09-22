@@ -56,22 +56,43 @@ export interface ApiResponse<T> {
 const DEMO_STORAGE_KEY = 'devintel_demo_mode';
 const DEMO_REPOS_STORAGE_KEY = 'devintel_demo_repositories';
 
+// Purge any legacy localStorage flag so existing browser tabs are cleanly reset to login page
+if (typeof window !== 'undefined') {
+  try {
+    localStorage.removeItem(DEMO_STORAGE_KEY);
+    localStorage.removeItem(DEMO_REPOS_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export function isDemoMode(): boolean {
   if (typeof window === 'undefined') return false;
-  return localStorage.getItem(DEMO_STORAGE_KEY) === 'true';
+  return sessionStorage.getItem(DEMO_STORAGE_KEY) === 'true';
 }
 
 export function setDemoMode(active: boolean): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(DEMO_STORAGE_KEY, active ? 'true' : 'false');
-  if (active && !localStorage.getItem(DEMO_REPOS_STORAGE_KEY)) {
-    localStorage.setItem(DEMO_REPOS_STORAGE_KEY, JSON.stringify(INITIAL_DEMO_REPOSITORIES));
+  if (active) {
+    sessionStorage.setItem(DEMO_STORAGE_KEY, 'true');
+    if (!sessionStorage.getItem(DEMO_REPOS_STORAGE_KEY)) {
+      sessionStorage.setItem(DEMO_REPOS_STORAGE_KEY, JSON.stringify(INITIAL_DEMO_REPOSITORIES));
+    }
+  } else {
+    sessionStorage.removeItem(DEMO_STORAGE_KEY);
+    sessionStorage.removeItem(DEMO_REPOS_STORAGE_KEY);
+    try {
+      localStorage.removeItem(DEMO_STORAGE_KEY);
+      localStorage.removeItem(DEMO_REPOS_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
   }
 }
 
 function getStoredDemoRepos(): Repository[] {
   try {
-    const raw = localStorage.getItem(DEMO_REPOS_STORAGE_KEY);
+    const raw = sessionStorage.getItem(DEMO_REPOS_STORAGE_KEY);
     if (raw) return JSON.parse(raw);
   } catch {
     // fallback
@@ -80,7 +101,7 @@ function getStoredDemoRepos(): Repository[] {
 }
 
 function saveStoredDemoRepos(repos: Repository[]) {
-  localStorage.setItem(DEMO_REPOS_STORAGE_KEY, JSON.stringify(repos));
+  sessionStorage.setItem(DEMO_REPOS_STORAGE_KEY, JSON.stringify(repos));
 }
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || '';
